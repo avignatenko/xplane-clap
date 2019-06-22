@@ -3,6 +3,8 @@ dataref("AP", "sim/cockpit/autopilot/autopilot_mode", "readonly")
 CL_AP_Pitch = create_dataref_table("ai/ap/pitch_active", "Int")
 CL_AP_Roll = create_dataref_table("ai/ap/roll_active", "Int")
 
+--debug_params = create_dataref_table("ai/ap/debug", "FloatArray")
+
 
 dataref("yoke_pitch", "sim/joystick/yoke_pitch_ratio", "writable")
 dataref("yoke_roll", "sim/joystick/yoke_roll_ratio", "writable")
@@ -45,17 +47,28 @@ dataref("flaps_deploy_ratio", "sim/flightmodel2/controls/flap_handle_deploy_rati
 
 -- 
 
+function sign(x)
+  return x>0 and 1 or x<0 and -1 or 0
+end
+
 function clamp(value, min, max)
   if value > max then return max end
   if value < min then return min end
   return value
 end 
 
+--
+
 local currentAP = AP
 local pilot_roll = 0
 local pilot_pitch = 0
 
 local have_control = false
+
+local last_pilot_controls_shift_run = -1
+local pilot_controls_shift_speed = 0.01 -- per/sec, fixme: read from A/P servo speed
+
+--
 
 function take_control(enable)
 
@@ -64,6 +77,29 @@ function take_control(enable)
   have_control = enable  
   set("sim/operation/override/override_control_surfaces", have_control and 1 or 0)
 
+end
+
+function shift_pilot_controls_to_zero()
+    
+  local now = os.clock();   
+
+  if last_pilot_controls_shift_run < 0 then last_pilot_controls_shift_run = now end
+  
+  local delta = (now - last_pilot_controls_shift_run) * pilot_controls_shift_speed
+  last_pilot_controls_shift_run = now
+
+  if math.abs(pilot_pitch) > 0.001 then   
+    local pitch_sign = sign(pilot_pitch)
+    pilot_pitch = pilot_pitch - pitch_sign * delta
+    if sign(pilot_pitch) ~= pitch_sign then pilot_pitch = 0.0 end
+  end
+  
+  if math.abs(pilot_roll) > 0.001 then
+    local roll_sign = sign(pilot_roll)
+    pilot_roll = pilot_roll - roll_sign * delta
+    if sign(pilot_roll) ~= roll_sign then pilot_roll = 0.0 end
+  end
+    
 end
 
 function update_controls()
@@ -76,6 +112,8 @@ if currentAP ~= AP then
   if AP ~= 2 then
       logMsg("CL Support: A/P disengaged")
 	  
+    last_pilot_controls_shift_run = -1
+
 	  -- trim is ignored anyway, so set it zero just in case
 	  trim_sim = 0
 	  
@@ -106,6 +144,9 @@ if AP ~= 2 then
 
 else  -- A/P engaged
 
+  -- experimental!
+  shift_pilot_controls_to_zero()
+
   local trim_2_elev = trim_sim
   if trim_sim > 0 then trim_2_elev = trim_2_elev * trim_max
   else trim_2_elev = trim_2_elev * trim_min
@@ -116,6 +157,8 @@ else  -- A/P engaged
   -- a/p is not using roll trim, so don't use it here (fixme, might be add?)
   yoke_roll = clamp(pilot_roll + servo_roll, -1, 1)
    
+  -- debug_params[0] = pilot_pitch
+  -- debug_params[1] = pilot_roll
 end
 
 
@@ -158,6 +201,7 @@ end
 
 end
 
+--
 
 -- make a switchable menu entry , default is on 
 add_macro(" CL Yoke" , "take_control(true)" , "take_control(false)" , "activate")
