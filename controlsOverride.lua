@@ -1,10 +1,11 @@
 dataref("AP", "sim/cockpit/autopilot/autopilot_mode", "readonly")
 
-CL_AP_Pitch = create_dataref_table("ai/ap/pitch_active", "Int")
-CL_AP_Roll = create_dataref_table("ai/ap/roll_active", "Int")
+--CL_AP_Pitch = create_dataref_table("ai/ap/pitch_active", "Int")
+--CL_AP_Roll = create_dataref_table("ai/ap/roll_active", "Int")
 
 --debug_params = create_dataref_table("ai/ap/debug", "FloatArray")
 
+dataref("paused", "sim/time/paused")
 
 dataref("yoke_pitch", "sim/joystick/yoke_pitch_ratio", "writable")
 dataref("yoke_roll", "sim/joystick/yoke_roll_ratio", "writable")
@@ -104,6 +105,7 @@ end
 
 function update_controls()
 
+if paused == 1 then return end
 if not have_control then return end 
 
 -- 1) set yoke_roll and yoke_pitch
@@ -118,19 +120,17 @@ if currentAP ~= AP then
 	  trim_sim = 0
 	  
 	  -- inform CL about AP off
-	  CL_AP_Pitch[0] = 0
-	  CL_AP_Roll[0] = 0
+	  --CL_AP_Pitch[0] = 0
+	  --CL_AP_Roll[0] = 0
   else
   
       logMsg("CL Support: A/P engaged")
-	  
+	  logMsg("CL Support: pitch before: " .. yoke_pitch)
 	  -- inform CL about AP on
-	  CL_AP_Pitch[0] = 1
-	  CL_AP_Roll[0] = 1	  
+	  --CL_AP_Pitch[0] = 1
+	  --CL_AP_Roll[0] = 1	  
   end
-  
-  currentAP = AP
-  
+    
 end
 
 -- A/P disengaged?
@@ -161,6 +161,17 @@ else  -- A/P engaged
   -- debug_params[1] = pilot_roll
 end
 
+if currentAP ~= AP then
+  if AP ~= 2 then
+	  
+  else
+  
+	  logMsg("CL Support: pitch after: " .. yoke_pitch)
+  end
+  
+  currentAP = AP
+  
+end
 
 -- 2) set surfaces angles from yoke_pitch and yoke_roll
 
