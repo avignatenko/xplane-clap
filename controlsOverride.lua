@@ -1,8 +1,5 @@
 dataref("AP", "sim/cockpit/autopilot/autopilot_mode", "readonly")
 
---CL_AP_Pitch = create_dataref_table("ai/ap/pitch_active", "Int")
---CL_AP_Roll = create_dataref_table("ai/ap/roll_active", "Int")
-
 --debug_params = create_dataref_table("ai/ap/debug", "FloatArray")
 
 dataref("paused", "sim/time/paused")
@@ -103,6 +100,16 @@ function shift_pilot_controls_to_zero()
     
 end
 
+function trim2elev(trim)
+  local mult = (trim > 0 and trim_max or trim_min)
+  return clamp(trim * mult, -1, 1)
+end
+
+function elev2trim(elev)
+  local mult = (elev > 0 and (1 / trim_max) or (1 / trim_min))
+  return clamp(elev * mult, -1, 1)
+end
+
 function update_controls()
 
 if paused == 1 then return end
@@ -114,21 +121,18 @@ if currentAP ~= AP then
   if AP ~= 2 then
       logMsg("CL Support: A/P disengaged")
 	  
-    last_pilot_controls_shift_run = -1
+      last_pilot_controls_shift_run = -1
 
 	  -- trim is ignored anyway, so set it zero just in case
 	  trim_sim = 0
 	  
-	  -- inform CL about AP off
-	  --CL_AP_Pitch[0] = 0
-	  --CL_AP_Roll[0] = 0
   else
   
       logMsg("CL Support: A/P engaged")
-	  logMsg("CL Support: pitch before: " .. yoke_pitch)
-	  -- inform CL about AP on
-	  --CL_AP_Pitch[0] = 1
-	  --CL_AP_Roll[0] = 1	  
+      
+	  trim_sim = elev2trim(pilot_pitch)
+	  pilot_pitch = clamp(pilot_pitch - trim2elev(trim_sim), -1, 1)
+	  	
   end
     
 end
@@ -146,27 +150,21 @@ else  -- A/P engaged
 
   -- experimental!
   shift_pilot_controls_to_zero()
-
-  local trim_2_elev = trim_sim
-  if trim_sim > 0 then trim_2_elev = trim_2_elev * trim_max
-  else trim_2_elev = trim_2_elev * trim_min
-  end
   
   -- send servo and trim to yoke position instead of elevator position (used by default)
-  yoke_pitch = clamp(pilot_pitch + servo_pitch  + trim_2_elev, -1, 1)
+  yoke_pitch = clamp(pilot_pitch + servo_pitch  + trim2elev(trim_sim), -1, 1)
   -- a/p is not using roll trim, so don't use it here (fixme, might be add?)
   yoke_roll = clamp(pilot_roll + servo_roll, -1, 1)
    
-  -- debug_params[0] = pilot_pitch
-  -- debug_params[1] = pilot_roll
+   --debug_params[0] = pilot_pitch
+   --debug_params[1] = pilot_roll
 end
 
 if currentAP ~= AP then
   if AP ~= 2 then
 	  
   else
-  
-	  logMsg("CL Support: pitch after: " .. yoke_pitch)
+  	  
   end
   
   currentAP = AP
@@ -177,29 +175,35 @@ end
 
 -- AILERONS
 
-if	yoke_roll_total > 0
-	then	ail_L =   aileron_max_def_down * yoke_roll_total
-		    ail_R = - aileron_max_def_up * yoke_roll_total
-	else	ail_L =   aileron_max_def_up * yoke_roll_total
-		    ail_R = - aileron_max_def_down * yoke_roll_total
+local roll_corrected = yoke_roll_total - servo_roll
+
+if	roll_corrected > 0
+	then	ail_L =   aileron_max_def_down * roll_corrected
+		    ail_R = - aileron_max_def_up * roll_corrected
+	else	ail_L =   aileron_max_def_up * roll_corrected
+		    ail_R = - aileron_max_def_down * roll_corrected
 end
 
 -- ELEVATOR
  
-if	yoke_pitch_total > 0
-	then	elev_L = - elevator_max_def_up * yoke_pitch_total
-		    elev_R =  - elevator_max_def_up * yoke_pitch_total 
-	else	elev_L = - elevator_max_def_down * yoke_pitch_total
-		    elev_R = - elevator_max_def_down * yoke_pitch_total
+ local pitch_corrected = yoke_pitch_total - servo_pitch
+ 
+if	pitch_corrected > 0
+	then	elev_L = - elevator_max_def_up * pitch_corrected
+		    elev_R =  - elevator_max_def_up * pitch_corrected 
+	else	elev_L = - elevator_max_def_down * pitch_corrected
+		    elev_R = - elevator_max_def_down * pitch_corrected
 end
 
 -- RUDDER
 
+local yaw_corrected = yoke_yaw_total - servo_yaw
+
 -- fixme: take left/right into account
 if yoke_yaw_total > 0 then
-  rudder = rudder_max_def_rr * yoke_yaw_total
+  rudder = rudder_max_def_rr * yaw_corrected
 else
-  rudder = rudder_max_def_lr * yoke_yaw_total  
+  rudder = rudder_max_def_lr * yaw_corrected  
 end
 
 -- FLAPS
